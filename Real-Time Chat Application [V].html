@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat Application</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --secondary-color: #818cf8;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+        }
+        
+        .message-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .message-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .message-container::-webkit-scrollbar-thumb {
+            background: var(--secondary-color);
+            border-radius: 3px;
+        }
+        
+        .message-container::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
+        }
+        
+        .notification {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .typing-indicator::after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto p-4 h-full">
+        <!-- Notifications -->
+        <div id="notifications" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+        <!-- Authentication View -->
+        <div id="auth-view" class="flex items-center justify-center h-screen">
+            <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+                <h1 class="text-3xl font-bold text-center text-indigo-600 mb-8">WebChat</h1>
+                
+                <div class="tabs flex justify-center mb-6">
+                    <button id="login-tab" class="tab tab-active px-4 py-2 font-medium text-indigo-600 border-b-2 border-indigo-600">Login</button>
+                    <button id="register-tab" class="tab px-4 py-2 font-medium text-gray-500">Register</button>
+                </div>
+                
+                <!-- Login Form -->
+                <div id="login-form">
+                    <div class="mb-4">
+                        <label for="login-username" class="block text-gray-700 mb-2">Username</label>
+                        <input type="text" id="login-username" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="mb-6">
+                        <label for="login-password" class="block text-gray-700 mb-2">Password</label>
+                        <input type="password" id="login-password" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <button id="login-btn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Login</button>
+                </div>
+                
+                <!-- Register Form -->
+                <div id="register-form" class="hidden">
+                    <div class="mb-4">
+                        <label for="register-username" class="block text-gray-700 mb-2">Username</label>
+                        <input type="text" id="register-username" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="register-email" class="block text-gray-700 mb-2">Email</label>
+                        <input type="email" id="register-email" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="mb-6">
+                        <label for="register-password" class="block text-gray-700 mb-2">Password</label>
+                        <input type="password" id="register-password" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <button id="register-btn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Register</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chat View -->
+        <div id="chat-view" class="hidden h-full">
+            <div class="flex h-[calc(100vh-2rem)]">
+                <!-- Sidebar -->
+                <div class="w-64 bg-white rounded-l-lg shadow-md flex flex-col">
+                    <!-- User Profile -->
+                    <div class="p-4 border-b flex items-center space-x-3">
+                        <div class="relative">
+                            <img src="https://placehold.co/40x40" alt="User profile picture" class="w-10 h-10 rounded-full" id="user-avatar">
+                            <span id="user-status" class="w-3 h-3 bg-green-500 rounded-full absolute bottom-0 right-0 border-2 border-white"></span>
+                        </div>
+                        <div>
+                            <div class="font-medium" id="sidebar-username">Username</div>
+                            <div class="text-xs text-gray-500">Online</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Rooms List -->
+                    <div class="overflow-y-auto flex-1">
+                        <div class="px-4 py-2 border-b">
+                            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rooms</h2>
+                        </div>
+                        <div id="rooms-list" class="divide-y divide-gray-200">
+                            <!-- Rooms will be added here dynamically -->
+                            <div class="room-item p-2 hover:bg-gray-50 cursor-pointer" room-id="general">#general</div>
+                            <div class="room-item p-2 hover:bg-gray-50 cursor-pointer" room-id="random">#random</div>
+                            <div class="room-item p-2 hover:bg-gray-50 cursor-pointer" room-id="help">#help</div>
+                        </div>
+                        
+                        <!-- Users List -->
+                        <div class="px-4 py-2 border-b">
+                            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Users</h2>
+                        </div>
+                        <div id="users-list" class="divide-y divide-gray-200">
+                            <!-- Users will be added here dynamically -->
+                        </div>
+                    </div>
+                    
+                    <!-- Create Room Button -->
+                    <div class="p-4 border-t">
+                        <button id="create-room-btn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Create Room</button>
+                    </div>
+                </div>
+                
+                <!-- Chat Area -->
+                <div class="flex-1 flex flex-col bg-gray-50 rounded-r-lg shadow-md">
+                    <!-- Chat Header -->
+                    <div class="p-4 border-b flex justify-between items-center">
+                        <div>
+                            <h2 id="chat-title" class="font-bold text-xl">#general</h2>
+                            <div id="typing-indicator" class="text-sm text-gray-500 h-5"></div>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button id="chat-menu-btn" class="text-gray-500 hover:text-gray-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Messages Container -->
+                    <div id="message-container" class="flex-1 overflow-y-auto p-4 space-y-4" style="scroll-behavior: smooth;">
+                        <!-- Messages will be added here dynamically -->
+                    </div>
+                    
+                    <!-- Message Input -->
+                    <div class="p-4 border-t">
+                        <form id="message-form" class="flex space-x-2">
+                            <input type="text" id="message-input" placeholder="Type your message here..." class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button type="submit" class="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Send</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal for creating a room -->
+        <div id="create-room-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h2 class="text-xl font-bold mb-4">Create New Room</h2>
+                <div class="mb-4">
+                    <label for="room-name" class="block text-gray-700 mb-2">Room Name</label>
+                    <input type="text" id="room-name" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button id="cancel-room-btn" class="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+                    <button id="confirm-room-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const WS_URL = "wss://echo.websocket.org"; // Using echo service for demo purposes
+        
+        // State
+        let currentUser = null;
+        let currentRoom = 'general';
+        let socket = null;
+        let userTypingTimeout = null;
+        let typingUsers = new Set();
+        
+        // DOM Elements
+        const authView = document.getElementById('auth-view');
+        const chatView = document.getElementById('chat-view');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const loginTab = document.getElementById('login-tab');
+        const registerTab = document.getElementById('register-tab');
+        const messageContainer = document.getElementById('message-container');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const roomsList = document.getElementById('rooms-list');
+        const usersList = document.getElementById('users-list');
+        const chatTitle = document.getElementById('chat-title');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const createRoomModal = document.getElementById('create-room-modal');
+        const roomNameInput = document.getElementById('room-name');
+        const sidebarUsername = document.getElementById('sidebar-username');
+        const userAvatar = document.getElementById('user-avatar');
+        const notificationsContainer = document.getElementById('notifications');
+        
+        // WebSocket Initialization
+        function connectWebSocket() {
+            if (socket) {
+                socket.close();
+            }
+            
+            socket = new WebSocket(WS_URL);
+            
+            socket.addEventListener('open', (event) => {
+                console.log('WebSocket connected');
+                sendSystemMessage(`${currentUser.username} has joined the chat`);
+                joinRoom(currentRoom);
+                updatePresence(true);
+            });
+            
+            socket.addEventListener('message', (event) => {
+                const message = JSON.parse(event.data);
+                handleIncomingMessage(message);
+            });
+            
+            socket.addEventListener('close', (event) => {
+                console.log('WebSocket disconnected');
+                updatePresence(false);
+                showNotification('Disconnected from chat', 'error');
+                setTimeout(() => {
+                    connectWebSocket();
+                }, 5000);
+            });
+            
+            socket.addEventListener('error', (event) => {
+                console.error('WebSocket error:', event);
+                showNotification('Connection error', 'error');
+            });
+        }
+        
+        // Message Handling
+        function sendMessage(content) {
+            const message = {
+                type: 'message',
+                room: currentRoom,
+                username: currentUser.username,
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+            
+            socket.send(JSON.stringify(message));
+            addMessageToUI(message, true);
+            
+            // Clear input after sending
+            messageInput.value = '';
+            
+            // Scroll to bottom
+            setTimeout(() => {
+                messageContainer.scrollTop = messageContainer.scrollHeight;
+            }, 50);
+        }
+        
+        function sendSystemMessage(content) {
+            const message = {
+                type: 'system',
+                room: currentRoom,
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+            
+            socket.send(JSON.stringify(message));
+            addMessageToUI(message);
+        }
+        
+        function sendTypingNotification(isTyping) {
+            const message = {
+                type: 'typing',
+                room: currentRoom,
+                username: currentUser.username,
+                isTyping: isTyping
+            };
+            
+            socket.send(JSON.stringify(message));
+        }
+        
+        function handleIncomingMessage(message) {
+            switch (message.type) {
+                case 'message':
+                    if (message.room === currentRoom) {
+                        addMessageToUI(message);
+                    } else {
+                        // Notification for message in another room
+                        showNotification(`New message in ${message.room} from ${message.username}`, 'info');
+                    }
+                    break;
+                    
+                case 'system':
+                    if (message.room === currentRoom) {
+                        addMessageToUI(message);
+                    }
+                    break;
+                    
+                case 'typing':
+                    handleTypingNotification(message);
+                    break;
+                    
+                case 'presence':
+                    updateUserList(message.users);
+                    break;
+                    
+                case 'room':
+                    updateRoomList(message.rooms);
+                    break;
+                    
+                default:
+                    console.log('Unknown message type:', message.type);
+            }
+        }
+        
+        function addMessageToUI(message, isCurrentUser = false) {
+            const messageDiv = document.createElement('div');
+            
+            if (message.type === 'system') {
+                messageDiv.className = 'text-center text-gray-500 text-sm';
+                messageDiv.textContent = message.content;
+            } else {
+                messageDiv.className = `flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`;
+                
+                const messageContentDiv = document.createElement('div');
+                messageContentDiv.className = `${isCurrentUser ? 'bg-indigo-600 text-white' : 'bg-white'} rounded-lg p-3 max-w-xs md:max-w-md lg:max-w-lg`;
+                
+                if (!isCurrentUser && !isCurrentUser) {
+                    const usernameDiv = document.createElement('div');
+                    usernameDiv.className = 'font-bold text-xs mb-1';
+                    usernameDiv.textContent = message.username;
+                    messageContentDiv.appendChild(usernameDiv);
+                }
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'text-sm';
+                contentDiv.textContent = message.content;
+                messageContentDiv.appendChild(contentDiv);
+                
+                const timeDiv = document.createElement('div');
+                timeDiv.className = `text-xs mt-1 ${isCurrentUser ? 'text-indigo-100' : 'text-gray-500'} text-right`;
+                
+                const messageTime = new Date(message.timestamp);
+                timeDiv.textContent = messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                messageContentDiv.appendChild(timeDiv);
+                
+                messageDiv.appendChild(messageContentDiv);
+            }
+            
+            messageContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom if not viewing old messages
+            if (!isScrollPositionAtHistory()) {
+                setTimeout(() => {
+                    messageContainer.scrollTop = messageContainer.scrollHeight;
+                }, 50);
+            }
+        }
+        
+        function handleTypingNotification(message) {
+            if (message.room !== currentRoom) return;
+            
+            if (message.username === currentUser.username) return;
+            
+            if (message.isTyping) {
+                typingUsers.add(message.username);
+            } else {
+                typingUsers.delete(message.username);
+            }
+            
+            updateTypingIndicator();
+        }
+        
+        function updateTypingIndicator() {
+            if (typingUsers.size === 0) {
+                typingIndicator.textContent = '';
+                return;
+            }
+            
+            if (typingUsers.size === 1) {
+                const [username] = typingUsers;
+                typingIndicator.innerHTML = `<span class="font-medium">${username}</span> is typing<span class="typing-indicator"></span>`;
+            } else if (typingUsers.size === 2) {
+                const [first, second] = [...typingUsers];
+                typingIndicator.innerHTML = `<span class="font-medium">${first}</span> and <span class="font-medium">${second}</span> are typing<span class="typing-indicator"></span>`;
+            } else {
+                const count = typingUsers.size;
+                typingIndicator.innerHTML = `<span class="font-medium">${count} people</span> are typing<span class="typing-indicator"></span>`;
+            }
+        }
+        
+        // Room Management
+        function joinRoom(roomName) {
+            currentRoom = roomName;
+            chatTitle.textContent = `#${roomName}`;
+            
+            // Highlight active room in sidebar
+            document.querySelectorAll('.room-item').forEach(room => {
+                room.classList.toggle('bg-indigo-100', room.getAttribute('room-id') === roomName);
+            });
+            
+            // Clear messages and load room history
+            messageContainer.innerHTML = '';
+            
+            // For demo, we'll just add a welcome message
+            addMessageToUI({
+                type: 'system',
+                room: roomName,
+                content: `Welcome to #${roomName}!`,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        function updateRoomList(rooms) {
+            roomsList.innerHTML = '';
+            
+            // Default rooms
+            ['general', 'random', 'help'].forEach(room => {
+                const roomDiv = document.createElement('div');
+                roomDiv.className = `room-item p-2 hover:bg-gray-50 cursor-pointer`;
+                roomDiv.setAttribute('room-id', room);
+                roomDiv.textContent = `#${room}`;
+                roomDiv.addEventListener('click', () => joinRoom(room));
+                roomsList.appendChild(roomDiv);
+            });
+            
+            // Custom rooms passed from server
+            rooms.forEach(room => {
+                const roomDiv = document.createElement('div');
+                roomDiv.className = `room-item p-2 hover:bg-gray-50 cursor-pointer`;
+                roomDiv.setAttribute('room-id', room);
+                roomDiv.textContent = `#${room}`;
+                roomDiv.addEventListener('click', () => joinRoom(room));
+                roomsList.appendChild(roomDiv);
+            });
+            
+            // Re-highlight current room
+            joinRoom(currentRoom);
+        }
+        
+        function createRoom(roomName) {
+            // In a real app, you would send this to the server
+            const message = {
+                type: 'room',
+                action: 'create',
+                room: roomName
+            };
+            
+            socket.send(JSON.stringify(message));
+            joinRoom(roomName);
+            showNotification(`Created room #${roomName}`, 'success');
+        }
+        
+        // User Management
+        function updateUserList(users) {
+            usersList.innerHTML = '';
+            
+            users.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.className = 'p-2 hover:bg-gray-50 flex items-center space-x-2';
+                
+                const avatarDiv = document.createElement('div');
+                avatarDiv.className = 'relative';
+                
+                const img = document.createElement('img');
+                img.src = `https://placehold.co/40x40`;
+                img.alt = `${user.username}'s profile picture`;
+                img.className = 'w-8 h-8 rounded-full';
+                avatarDiv.appendChild(img);
+                
+                const statusDot = document.createElement('span');
+                statusDot.className = `w-2 h-2 rounded-full absolute bottom-0 right-0 border border-white ${user.online ? 'bg-green-500' : 'bg-gray-400'}`;
+                avatarDiv.appendChild(statusDot);
+                
+                const usernameDiv = document.createElement('div');
+                usernameDiv.className = 'text-sm';
+                usernameDiv.textContent = user.username;
+                
+                userDiv.appendChild(avatarDiv);
+                userDiv.appendChild(usernameDiv);
+                
+                usersList.appendChild(userDiv);
+            });
+        }
+        
+        function updatePresence(isOnline) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            
+            const message = {
+                type: 'presence',
+                username: currentUser.username,
+                online: isOnline
+            };
+            
+            socket.send(JSON.stringify(message));
+        }
+        
+        // UI Helpers
+        function showNotification(text, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification bg-${getNotificationColor(type)}-500 text-white px-4 py-2 rounded-lg shadow-lg`;
+            
+            const content = document.createElement('div');
+            content.className = 'flex items-center';
+            
+            const icon = document.createElement('span');
+            icon.className = 'mr-2';
+            
+            switch (type) {
+                case 'error':
+                    icon.innerHTML = '⚠️';
+                    break;
+                case 'success':
+                    icon.innerHTML = '✓';
+                    break;
+                default:
+                    icon.innerHTML = 'ℹ️';
+            }
+            
+            const textSpan = document.createElement('span');
+            textSpan.textContent = text;
+            
+            content.appendChild(icon);
+            content.appendChild(textSpan);
+            notification.appendChild(content);
+            
+            notificationsContainer.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 5000);
+        }
+        
+        function getNotificationColor(type) {
+            switch (type) {
+                case 'error': return 'red';
+                case 'success': return 'green';
+                case 'warning': return 'yellow';
+                default: return 'blue';
+            }
+        }
+        
+        function isScrollPositionAtHistory() {
+            const threshold = 100;
+            return messageContainer.scrollHeight - messageContainer.scrollTop - messageContainer.clientHeight > threshold;
+        }
+        
+        // Event Listeners
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (message) {
+                sendMessage(message);
+                
+                // Clear any typing notification
+                sendTypingNotification(false);
+            }
+        });
+        
+        messageInput.addEventListener('input', () => {
+            if (!userTypingTimeout) {
+                sendTypingNotification(true);
+            } else {
+                clearTimeout(userTypingTimeout);
+            }
+            
+            userTypingTimeout = setTimeout(() => {
+                sendTypingNotification(false);
+                userTypingTimeout = null;
+            }, 3000);
+        });
+        
+        document.getElementById('create-room-btn').addEventListener('click', () => {
+            createRoomModal.classList.remove('hidden');
+            roomNameInput.focus();
+        });
+        
+        document.getElementById('cancel-room-btn').addEventListener('click', () => {
+            createRoomModal.classList.add('hidden');
+            roomNameInput.value = '';
+        });
+        
+        document.getElementById('confirm-room-btn').addEventListener('click', () => {
+            const roomName = roomNameInput.value.trim();
+            if (roomName) {
+                createRoom(roomName);
+                createRoomModal.classList.add('hidden');
+                roomNameInput.value = '';
+            } else {
+                showNotification('Please enter a room name', 'error');
+            }
+        });
+        
+        loginTab.addEventListener('click', () => {
+            loginTab.classList.add('tab-active');
+            loginTab.classList.add('text-indigo-600', 'border-indigo-600');
+            registerTab.classList.remove('tab-active');
+            registerTab.classList.remove('text-indigo-600', 'border-indigo-600');
+            
+            loginForm.classList.remove('hidden');
+            registerForm.classList.add('hidden');
+        });
+        
+        registerTab.addEventListener('click', () => {
+            registerTab.classList.add('tab-active');
+            registerTab.classList.add('text-indigo-600', 'border-indigo-600');
+            loginTab.classList.remove('tab-active');
+            loginTab.classList.remove('text-indigo-600', 'border-indigo-600');
+            
+            registerForm.classList.remove('hidden');
+            loginForm.classList.add('hidden');
+        });
+        
+        document.getElementById('login-btn').addEventListener('click', () => {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+            
+            if (username && password) {
+                // In a real app, you would validate with a server
+                currentUser = {
+                    username: username,
+                    email: `${username.toLowerCase()}@example.com`
+                };
+                
+                sidebarUsername.textContent = currentUser.username;
+                userAvatar.src = `https://placehold.co/40x40?text=${username.charAt(0).toUpperCase()}`;
+                
+                authView.classList.add('hidden');
+                chatView.classList.remove('hidden');
+                
+                connectWebSocket();
+            } else {
+                showNotification('Please fill in all fields', 'error');
+            }
+        });
+        
+        document.getElementById('register-btn').addEventListener('click', () => {
+            const username = document.getElementById('register-username').value.trim();
+            const email = document.getElementById('register-email').value.trim();
+            const password = document.getElementById('register-password').value.trim();
+            
+            if (username && email && password) {
+                // In a real app, you would send this to a registration endpoint
+                currentUser = {
+                    username: username,
+                    email: email
+                };
+                
+                sidebarUsername.textContent = currentUser.username;
+                userAvatar.src = `https://placehold.co/40x40?text=${username.charAt(0).toUpperCase()}`;
+                
+                authView.classList.add('hidden');
+                chatView.classList.remove('hidden');
+                
+                connectWebSocket();
+                
+                showNotification('Account created successfully', 'success');
+                
+                // Switch back to login tab (for UX when returning)
+                loginTab.click();
+            } else {
+                showNotification('Please fill in all fields', 'error');
+            }
+        });
+        
+        // Initialize the app with some demo rooms/users
+        window.addEventListener('load', () => {
+            // Simulate some existing users
+            updateUserList([
+                { username: 'Alice', online: true },
+                { username: 'Bob', online: false },
+                { username: 'Charlie', online: true }
+            ]);
+            
+            // Simulate some custom rooms
+            updateRoomList(['tech', 'design', 'support']);
+            
+            // Welcome message for UX
+            addMessageToUI({
+                type: 'system',
+                room: 'general',
+                content: 'Welcome to WebChat! Please login or register to start chatting.',
+                timestamp: new Date().toISOString()
+            });
+            
+            // Sample notifications
+            setTimeout(() => {
+                showNotification('Alice joined the chat', 'info');
+            }, 1000);
+            
+            setTimeout(() => {
+                showNotification('New version available', 'info');
+            }, 3000);
+        });
+    </script>
+</body>
+</html>
